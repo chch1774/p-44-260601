@@ -1,58 +1,42 @@
 server:
-  port: 8080
-  shutdown: graceful
-  tomcat:
-    max-swallow-size: 1GB
-    max-http-form-post-size: 1GB
+  forward-headers-strategy: native
 
 spring:
-  output:
-    ansi:
-      enabled: always
-
+  config:
+    import: optional:file:.env.properties
   profiles:
     active: dev
     include: secret
-
-  servlet:
-    multipart:
-      max-request-size: 5MB
-      max-file-size: ${spring.servlet.multipart.max-request-size}
-
-  jackson:
-    serialization:
-      fail-on-empty-beans: false
-
+  thymeleaf:
+    cache: false
+    prefix: file:src/main/resources/templates/
+  output:
+    ansi:
+      enabled: always
   datasource:
-    url: jdbc:h2:./db_dev;MODE=MySQL
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
     hikari:
       auto-commit: false
-
   jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: update
-    show-sql: false
     properties:
       hibernate:
         format_sql: true
         highlight_sql: true
         use_sql_comments: true
         default_batch_fetch_size: 100
+    hibernate:
+      ddl-auto: update
+    show-sql: true
 
   security:
     oauth2:
       client:
         registration:
           kakao:
-            clientId: ON_SECRET
+            clientId: ${custom.oauth2.kakao.clientId}
             scope: profile_nickname, profile_image
             client-name: Kakao
             authorization-grant-type: authorization_code
-            redirect-uri: "${custom.site.backUrl}/login/oauth2/code/kakao"
+            redirect-uri: '{baseUrl}/login/oauth2/code/kakao'
         provider:
           kakao:
             authorization-uri: https://kauth.kakao.com/oauth/authorize
@@ -60,35 +44,34 @@ spring:
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
 
+
+
+springdoc:
+  default-produces-media-type: application/json
+
 logging:
   level:
-    org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.orm.jdbc.extract: TRACE
     org.springframework.transaction.interceptor: TRACE
-
-springdoc:
-  default-produces-media-type: application/json;charset=UTF-8
-
+    com.rest1: DEBUG
 
 custom:
-  appName: app4
-  prod:
-    domain: qwas.shop
-    backUrl: "https://api.${custom.appName}.${custom.prod.domain}"
-    frontUrl: "https://www.${custom.appName}.${custom.prod.domain}"
-
   dev:
     domain: localhost
     backUrl: "http://${custom.dev.domain}:${server.port}"
     frontUrl: "http://${custom.dev.domain}:3000"
 
+  prod:
+    domain: test100.shop
+    backUrl: "https://api.${custom.prod.domain}"
+    frontUrl: "https://www.${custom.prod.domain}"
+
   site:
-    domain: "${custom.prod.domain}"
-    backUrl: "${custom.prod.backUrl}"
-    frontUrl: "${custom.prod.frontUrl}"
+    domain: "${custom.dev.domain}"
+    backUrl: "${custom.dev.backUrl}"
+    frontUrl: "${custom.dev.frontUrl}"
 
   jwt:
-    expire-seconds: "#{60 * 30}"
-  genFile:
-    dirPath: c:/temp/glog_dev
+    expireSeconds: "#{30 * 60}"
+    secretPattern: ${custom.jwt.secretPattern}

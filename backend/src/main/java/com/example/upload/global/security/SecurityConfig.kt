@@ -1,12 +1,15 @@
 package com.example.upload.global.security
 import com.example.upload.global.app.AppConfig
+import com.example.upload.global.app.SiteProperties
 import com.example.upload.global.dto.Empty
 import com.example.upload.global.dto.RsData
 import com.example.upload.standard.util.Ut
 import jakarta.servlet.http.HttpServletResponse
+import org.apache.catalina.webresources.TomcatURLStreamHandlerFactory.disable
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
+import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.annotation.web.invoke
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -21,62 +24,74 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 @EnableWebSecurity
 class SecurityConfig(
     private val customAuthenticationFilter: CustomAuthenticationFilter,
-    private val customAuthorizationRequestResolver: CustomAuthorizationRequestResolver,
-    private val customAuthenticationSuccessHandler: CustomAuthenticationSuccessHandler
+//    private val customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler,
+//    private val customOAuth2AuthorizationRequestResolver: CustomOAuth2AuthorizationRequestResolver,
+    private val siteProperties: SiteProperties
 ) {
 
     @Bean
-    fun securityFilterChain(http: org.springframework.security.config.annotation.web.builders.HttpSecurity): SecurityFilterChain {
+    fun filterChain(http: HttpSecurity): SecurityFilterChain {
+
         http {
             authorizeHttpRequests {
+                authorize("/favicon.ico", permitAll)
                 authorize("/h2-console/**", permitAll)
-                authorize(HttpMethod.GET, "/api/*/posts/{id:\\d+}", permitAll)
                 authorize(HttpMethod.GET, "/api/*/posts", permitAll)
+                authorize(HttpMethod.GET, "/api/*/posts/{id:\\d+}", permitAll)
                 authorize(HttpMethod.GET, "/api/*/posts/{postId:\\d+}/comments", permitAll)
-                authorize(HttpMethod.GET, "/api/*/posts/{postId:\\d+}/genFiles", permitAll)
-                authorize("/api/*/members/login", permitAll)
-                authorize("/api/*/members/join", permitAll)
-                authorize("/api/*/members/logout", permitAll)
-                authorize("/api/v1/posts/statistics", hasRole("ADMIN"))
+                authorize(HttpMethod.GET, "/api/*/posts/{postId:\\d+}/comments/{commentId:\\d+}", permitAll)
+                authorize(HttpMethod.POST, "/api/v1/members/login", permitAll)
+                authorize(HttpMethod.POST, "/api/v1/members/join", permitAll)
+                authorize(HttpMethod.DELETE, "/api/v1/members/logout", permitAll)
+                authorize("/api/*/adm/**", hasRole("ADMIN"))
                 authorize("/api/*/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
 
-            headers {
-                frameOptions {
-                    sameOrigin = true
-                }
-            }
-
             csrf { disable() }
 
+            headers {
+                frameOptions { sameOrigin = true }
+            }
+
+            addFilterBefore<UsernamePasswordAuthenticationFilter>(customAuthenticationFilter)
             sessionManagement {
                 sessionCreationPolicy = SessionCreationPolicy.STATELESS
             }
 
-            oauth2Login {
-                authenticationSuccessHandler = customAuthenticationSuccessHandler
-                authorizationEndpoint {
-                    authorizationRequestResolver = customAuthorizationRequestResolver
-                }
-            }
-
-            addFilterBefore<UsernamePasswordAuthenticationFilter>(customAuthenticationFilter)
+//            oauth2Login {
+//                authenticationSuccessHandler = customOAuth2LoginSuccessHandler
+//                authorizationEndpoint {
+//                    authorizationRequestResolver = customOAuth2AuthorizationRequestResolver
+//                }
+//            }
 
             exceptionHandling {
-                authenticationEntryPoint = AuthenticationEntryPoint { request, response, authException ->
-                    response.contentType = "application/json;charset=UTF-8"
-                    response.status = HttpServletResponse.SC_UNAUTHORIZED
+                authenticationEntryPoint = AuthenticationEntryPoint { _, response, _ ->
+                    response.contentType =
+                        "application/json; charset=UTF-8"
+                    response.status = 401
                     response.writer.write(
-                        Ut.json.toString(RsData<Empty>("401-1", "잘못된 인증키입니다."))
+                        """
+                            {
+                                "resultCode": "401-1",
+                                "msg": "로그인 후 이용해주세요."
+                            }
+                            """.trimIndent()
                     )
                 }
 
-                accessDeniedHandler = AccessDeniedHandler { request, response, accessDeniedException ->
-                    response.contentType = "application/json;charset=UTF-8"
-                    response.status = HttpServletResponse.SC_FORBIDDEN
+                accessDeniedHandler = AccessDeniedHandler { _, response, _ ->
+                    response.contentType =
+                        "application/json; charset=UTF-8"
+                    response.status = 403
                     response.writer.write(
-                        Ut.json.toString(RsData<Empty>("403-1", "접근 권한이 없습니다."))
+                        """
+                            {
+                                "resultCode": "403-1",
+                                "msg": "권한이 없습니다."
+                            }
+                        """.trimIndent()
                     )
                 }
             }
@@ -88,10 +103,12 @@ class SecurityConfig(
     @Bean
     fun corsConfigurationSource(): UrlBasedCorsConfigurationSource {
         val configuration = CorsConfiguration().apply {
-            allowedOrigins = listOf("https://cdpn.io", AppConfig.getSiteFrontUrl())
-            allowedMethods = listOf("GET", "POST", "PUT", "DELETE")
-            allowCredentials = true
+            allowedOrigins =
+                listOf("https://cdpn.io", siteProperties.frontUrl)
+            allowedMethods =
+                listOf("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
             allowedHeaders = listOf("*")
+            allowCredentials = true
         }
 
         return UrlBasedCorsConfigurationSource().apply {

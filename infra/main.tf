@@ -58,17 +58,6 @@ resource "aws_subnet" "subnet_3" {
   }
 }
 
-resource "aws_subnet" "subnet_4" {
-  vpc_id                  = aws_vpc.vpc_1.id
-  cidr_block              = "10.0.4.0/24"
-  availability_zone       = "${var.region}d"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "${var.prefix}-subnet-4"
-  }
-}
-
 resource "aws_internet_gateway" "igw_1" {
   vpc_id = aws_vpc.vpc_1.id
 
@@ -105,11 +94,6 @@ resource "aws_route_table_association" "association_3" {
   route_table_id = aws_route_table.rt_1.id
 }
 
-resource "aws_route_table_association" "association_4" {
-  subnet_id      = aws_subnet.subnet_4.id
-  route_table_id = aws_route_table.rt_1.id
-}
-
 resource "aws_security_group" "sg_1" {
   name = "${var.prefix}-sg-1"
 
@@ -138,7 +122,7 @@ resource "aws_security_group" "sg_1" {
 
 # EC2 역할 생성
 resource "aws_iam_role" "ec2_role_1" {
-  name = "${var.prefix}-ec2-role-1"
+  name = "${var.prefix}-ec2-role-2"
 
   # 이 역할에 대한 신뢰 정책 설정. EC2 서비스가 이 역할을 가정할 수 있도록 설정
   assume_role_policy = <<EOF
@@ -172,7 +156,7 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm" {
 
 # IAM 인스턴스 프로파일 생성
 resource "aws_iam_instance_profile" "instance_profile_1" {
-  name = "${var.prefix}-instance-profile-1"
+  name = "${var.prefix}-instance-profile-2"
   role = aws_iam_role.ec2_role_1.name
 }
 
@@ -239,7 +223,7 @@ defaults
 
 frontend http_front
     bind *:80
-    acl host_app1 hdr_beg(host) -i api.app4.qwas.shop
+    acl host_app1 hdr_beg(host) -i api.test100.shop
 
     use_backend http_back_1 if host_app1
 
@@ -311,40 +295,18 @@ echo "${var.github_access_token_1}" | docker login ghcr.io -u ${var.github_acces
 END_OF_FILE
 }
 
-# 최신 Amazon Linux 2023 AMI 조회 (프리 티어 호환)
-data "aws_ami" "latest_amazon_linux" {
-  most_recent = true
-  owners = ["amazon"]
-
-  filter {
-    name = "name"
-    values = ["al2023-ami-2023.*-x86_64"]
-  }
-
-  filter {
-    name = "architecture"
-    values = ["x86_64"]
-  }
-
-  filter {
-    name = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name = "root-device-type"
-    values = ["ebs"]
-  }
+data "aws_ssm_parameter" "amazon_linux_ami" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
 
 # EC2 인스턴스 생성
 resource "aws_instance" "ec2_1" {
   # 사용할 AMI ID
-  ami = data.aws_ami.latest_amazon_linux.id
+  ami = data.aws_ssm_parameter.amazon_linux_ami.value
   # EC2 인스턴스 유형
   instance_type = "t3.micro"
   # 사용할 서브넷 ID
-  subnet_id = aws_subnet.subnet_4.id
+  subnet_id = aws_subnet.subnet_2.id
   # 적용할 보안 그룹 ID
   vpc_security_group_ids = [aws_security_group.sg_1.id]
   # 퍼블릭 IP 연결 설정
@@ -367,4 +329,16 @@ resource "aws_instance" "ec2_1" {
   user_data = <<-EOF
 ${local.ec2_user_data_base}
 EOF
+}
+
+data "aws_eip" "eip_ec2_1" {
+  filter {
+    name   = "tag:EC2"
+    values = ["dev-ec2-1"]
+  }
+}
+
+resource "aws_eip_association" "ec2_1" {
+  instance_id   = aws_instance.ec2_1.id
+  allocation_id = data.aws_eip.eip_ec2_1.id
 }

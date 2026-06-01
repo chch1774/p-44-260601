@@ -1,71 +1,70 @@
 "use client";
-
-import { client } from "@/lib/backend/client";
-
-import NarrowHeader from "@/components/business/NarrowHeader";
-import WideHeader from "@/components/business/WideHeader";
-import {
-  LoginMemberContext,
-  useLoginMember,
-} from "@/stores/auth/loginMemberStore";
+import { useAuthContext } from "@/global/auth/hooks/useAuth";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function ClinetLayout({
-  children,
-}: Readonly<{
+export default function ClientLayout({
+                                       children,
+                                     }: {
   children: React.ReactNode;
-}>) {
+}) {
+  const authState = useAuthContext();
   const {
-    setLoginMember,
-    isLogin,
     loginMember,
-    removeLoginMember,
-    isLoginMemberPending,
-    isAdmin,
-    setNoLoginMember,
-  } = useLoginMember();
-
-  const loginMemberContextValue = {
-    loginMember,
-    setLoginMember,
-    removeLoginMember,
+    getLoginMember,
+    logout: _logout,
     isLogin,
-    isLoginMemberPending,
     isAdmin,
-    setNoLoginMember,
-  };
-
-  async function fetchLoginMember() {
-    const response = await client.GET("/api/v1/members/me", {
-      credentials: "include",
-    });
-
-    if (response.error) {
-      setNoLoginMember();
-      return;
-    }
-
-    setLoginMember(response.data.data);
-  }
+  } = authState;
+  const router = useRouter();
 
   useEffect(() => {
-    fetchLoginMember();
+    getLoginMember({
+      onSuccess: (data) => {
+        console.log("data", data);
+      },
+      onError: (err) => {
+        console.log("err", err);
+      },
+    });
   }, []);
 
+  const logout = () => {
+    _logout({
+      onSuccess: (data) => {
+        alert(data.msg);
+        router.replace("/");
+      },
+      onError: (rsData) => {
+        alert(rsData.msg);
+      },
+    });
+  };
+
   return (
-    <>
-      <LoginMemberContext.Provider value={loginMemberContextValue}>
+      <>
         <header>
-          <WideHeader className="flex items-center justify-end gap-3 px-4 hidden md:flex" />
-          <NarrowHeader className="flex items-center justify-end gap-3 px-4 flex md:hidden" />
+          <nav className="flex gap-4">
+            <Link href="/">메인</Link>
+            <Link href="/posts">글 목록</Link>
+            {!isLogin && <Link href="/members/login">로그인</Link>}
+            {!isLogin && (
+                <Link
+                    href={`${process.env.NEXT_PUBLIC_API_BASE_URL}/oauth2/authorization/kakao?redirectUrl=${process.env.NEXT_PUBLIC_FRONT_BASE_URL}`}
+                >
+                  카카오 로그인
+                </Link>
+            )}
+            {isLogin && <button onClick={logout}>로그아웃</button>}
+            {isLogin && <Link href="/members/me">{loginMember?.name}</Link>}
+            {isLogin && isAdmin && <Link href="/adm/members">회원 목록</Link>}
+          </nav>
         </header>
-        <div className="flex flex-col flex-grow justify-center items-center">
+        <main className="flex-1 flex flex-col justify-center items-center">
           {children}
-        </div>
-        <footer className="flex justify-center gap-7 p-4">
-          @Copywrite 2025
-        </footer>
-      </LoginMemberContext.Provider>
-    </>
+        </main>
+        <footer>푸터</footer>
+      </>
   );
 }
